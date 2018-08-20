@@ -1,0 +1,504 @@
+---
+title: "Exercise 2"
+author: "Danchen Zhao, Shan Qin, Candice Zuo"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r, include= FALSE}
+setwd("C:/Users/zdc/Dropbox/STA380-master/data")
+```
+##Flights at ABIA
+
+```{r}
+library(ggplot2)
+library(readr)
+ABIA = read.csv("~/data/ABIA.csv")
+```
+
+The question we are interested in is to figure out the best day and the quickest airline for the top-10 most popular destination. There are two parts of our analysis. The first is the percentage of chance of one specific airline to arrive early on each weekday. And the second is the percentage of chance of one unique airline to arrive early on each weekday.
+
+First we need to know which ten destination are the most popular.
+
+```{r}
+depart = ABIA[which(ABIA$Origin=='AUS'),]
+depart_dest_freq = data.frame(aggregate(depart$FlightNum~ depart$Dest, 
+                                           depart, length))
+depart_dest_freq = depart_dest_freq[order(depart_dest_freq$depart.FlightNum,decreasing = FALSE),]
+depart_dest_freq_most = tail(depart_dest_freq, 10)
+depart_dest_freq_most
+```
+
+Then we select out all the flights that have these destinations and have negative number on ArrDelay column. We pick three variables that is useful to us: time of arrive early, day of week and the destination airport. We calculate the percentage of flight that arrives early for each airline in each weekday.
+
+```{r}
+dest_most = ABIA[which(ABIA$Dest=='JFK'|ABIA$Dest=='LAX'|ABIA$Dest=='ATL'|ABIA$Dest=='HOU' |ABIA$Dest=='ORD'|ABIA$Dest=='DEN'|ABIA$Dest=='PHX'|ABIA$Dest=='IAH'|ABIA$Dest=='DFW'|ABIA$Dest=='DAL'),]
+
+dest_most_arrivetime_day <- na.omit(dest_most[,c("ArrDelay","DayOfWeek", "Dest")])
+dest_most_arriveearly_day = dest_most_arrivetime_day[which(dest_most_arrivetime_day$ArrDelay<0),]
+
+dest_most_arriveearly_day_freq = data.frame(aggregate(dest_most_arriveearly_day$ArrDelay~ dest_most_arriveearly_day$Dest+dest_most_arriveearly_day$DayOfWeek, 
+                                                      dest_most_arriveearly_day, length))
+
+dest_most_freq = data.frame(aggregate(dest_most$FlightNum~ dest_most$Dest+dest_most$DayOfWeek, 
+                                      dest_most, length))
+
+dest_most_early_percent = merge(dest_most_arriveearly_day_freq, dest_most_freq, by.x=c("dest_most_arriveearly_day.Dest","dest_most_arriveearly_day.DayOfWeek"), by.y=c("dest_most.Dest","dest_most.DayOfWeek"))
+dest_most_early_percent = within(dest_most_early_percent, percent <- dest_most_arriveearly_day.ArrDelay/dest_most.FlightNum)
+
+dest_most_arriveearly_day_freq_plt <- ggplot(dest_most_early_percent, aes(dest_most_arriveearly_day.Dest, dest_most_arriveearly_day.DayOfWeek, fill = percent))  + geom_tile() + ylab("Day of the week") + xlab("Destination") + ggtitle("Frequency of Flight Early in Top 10 Destinations ") + scale_fill_gradient( trans="sqrt", low = "white", high="dark blue",name = 'Percentage')
+dest_most_arriveearly_day_freq_plt
+```
+
+As a result, we find that the flights going to Houston airport on Saturday have the highest early arrival rate: more than 70%. For ATL is Saturday; for DAL is Saturday; for DEN is Tuesday and Wednesday; for DFW is Saturday; for IAH is Wednesday; for JFK is Wednesday and Sunday; for LAX is Tuesday; for ORD is Thursday and Saturday; for PHX is Saturday and Sunday.
+
+Next step is to early arrival rate of each airline.
+
+```{r}
+arrive_early= ABIA[which(ABIA[,15] < 0),]
+
+carrier_freq_early = data.frame(aggregate(arrive_early$ArrDelay~ arrive_early$UniqueCarrier+arrive_early$DayOfWeek, 
+                                          arrive_early, length))
+carrier_freq = data.frame(aggregate(ABIA$FlightNum~ ABIA$UniqueCarrier+ABIA$DayOfWeek, 
+                          ABIA, length))
+
+carrier_early_percent = merge(carrier_freq_early, carrier_freq, by.x=c("arrive_early.UniqueCarrier","arrive_early.DayOfWeek"), by.y=c("ABIA.UniqueCarrier","ABIA.DayOfWeek"))
+carrier_early_percent = within(carrier_early_percent, percent <- arrive_early.ArrDelay/ABIA.FlightNum)
+
+carrier_early_percent_plt <- ggplot(carrier_early_percent, aes(arrive_early.UniqueCarrier, arrive_early.DayOfWeek, fill = percent))  + geom_tile() + ylab("Day of the week") + xlab("Unique Carrier") + ggtitle("The Frequency of Carriers Arriving Eariler ") + scale_fill_gradient( trans="sqrt", low = "white", high="dark blue",name = 'Percentage')
+carrier_early_percent_plt
+```
+
+From the graph, we can see that 9E does the best job on Monday; F9 does the best job on Tuesday; US and XE do the best job on Wednesday; US does a little better job than others on Thursday; 9E and B6 do a good job on Friday; MQ does a super good job on Saturday; 9E and MQ both do a good job on Sunday.
+
+#### Conclusion
+
+Combing the two pictures, we get the answer to our question. 
+
+Destination    | Airline   | Arrival Airport  | Day of the Week 
+---------------|-----------|------------------|-----------------
+Atlanta        |   MQ      |        ATL       |     Saturday
+Dallas         |   MQ      |        DAL       |     Saturday 
+Denver         |   F9      |        DEN       |     Tuesday
+Houston        |   MQ      |        HOU       |     Saturday 
+New York       |   MK      |        JFK       |     Sunday
+Los Angeles    |   F9      |        LAX       |     Tuesday 
+Chicago        | US or MQ  |        ORD       |     Saturday
+Chicago        |   US      |        ORD       |     Thursday 
+Phoenix        |   MQ      |        PHX       |     Saturday or Sunday
+
+For example, if one goes to Chicago, he should take US or MQ on Saturday or US on Thursday.
+
+
+
+##Author attribution
+
+####Data Preparation
+
+```{r, include=FALSE}
+rm(list = ls())
+library(tm)
+```
+
+
+```{r}
+readerPlain = function(fname){
+				readPlain(elem=list(content=readLines(fname)), 
+							id=fname, language='en')}
+
+```
+
+
+First, we got the two DTMs for the train set and the test set and built matrices for them. 
+```{r, warning=FALSE}
+author_dirs = Sys.glob('~/data/ReutersC50/C50train/*')
+
+file_list = c()
+labels = c()
+for(author in author_dirs) {
+	author_name = substring(author, first=49)
+	files_to_add = Sys.glob(paste0(author, '/*.txt'))
+	file_list = append(file_list, files_to_add)
+}
+all_docs = lapply(file_list, readerPlain)
+train_corpus = Corpus(VectorSource(all_docs))
+
+
+
+train_corpus = tm_map(train_corpus, content_transformer(tolower)) # make everything lowercase
+train_corpus = tm_map(train_corpus, content_transformer(removeNumbers)) # remove numbers
+train_corpus = tm_map(train_corpus, content_transformer(removePunctuation)) # remove punctuation
+train_corpus = tm_map(train_corpus, content_transformer(stripWhitespace)) ## remove excess white-space
+train_corpus = tm_map(train_corpus, content_transformer(removeWords), stopwords("SMART"))
+
+DTM_train = DocumentTermMatrix(train_corpus)
+DTM_train = removeSparseTerms(DTM_train, 0.95)
+
+
+```
+
+
+```{r}
+X_train = as.matrix(DTM_train)
+
+```
+
+```{r, warning=FALSE}
+
+author_dirs = Sys.glob('~/data/ReutersC50/C50test/*')
+
+
+file_list = c()
+labels = c()
+for(author in author_dirs) {
+	author_name = substring(author, first=48)
+	files_to_add = Sys.glob(paste0(author, '/*.txt'))
+	file_list = append(file_list, files_to_add)
+	labels = append(labels, rep(author_name, length(files_to_add)))
+}
+
+all_docs = lapply(file_list, readerPlain) 
+names(all_docs) = file_list
+names(all_docs) = sub('.txt', '', names(all_docs))
+
+
+
+test_corpus = Corpus(VectorSource(all_docs))
+
+
+
+test_corpus = tm_map(test_corpus, content_transformer(tolower)) # make everything lowercase
+test_corpus = tm_map(test_corpus, content_transformer(removeNumbers)) # remove numbers
+test_corpus = tm_map(test_corpus, content_transformer(removePunctuation)) # remove punctuation
+test_corpus = tm_map(test_corpus, content_transformer(stripWhitespace)) ## remove excess white-space
+test_corpus = tm_map(test_corpus, content_transformer(removeWords), stopwords("SMART"))
+
+```
+
+```{r}
+
+
+DTM_test_temp = DocumentTermMatrix(test_corpus)
+DTM_test_temp = removeSparseTerms(DTM_test_temp, 0.95)
+
+
+X_test = as.matrix(DTM_test_temp)
+
+```
+
+Then, for modeling purpose, we reconstructed the matrix for the test set so that its structure is same as that of the train set. Meanwhile, we added a pseudo word to both sets to represent the the words appear in the test set but not the train set.
+```{r}
+
+train_words = colnames(X_train)
+
+sum1 = rowSums(X_test)
+
+
+test_words = colnames(X_test)
+
+# get the words to be droped or added
+add = vector(length=0)
+drop = vector(length=0)
+
+for (test_word in test_words) {
+  if (!test_word %in% train_words) {
+    drop <- c(drop, test_word)
+  }
+}
+
+for (word in train_words) {
+  if (!word %in% test_words) {
+    add <- c(add, word)
+  }
+}
+
+
+# build a dataframe for words that appear in train set but not test set
+zeros <- matrix(0, nrow = nrow(X_train), ncol=length(add))
+
+colnames(zeros) <- add
+
+X_test_2 = cbind(X_test, zeros)
+
+X_test_2 = X_test_2[,order(colnames(X_test_2))]
+
+
+X_test_2 = X_test_2[,!colnames(X_test_2) %in% drop]
+X_train = X_train[,order(colnames(X_train))]
+
+
+# create the pseudo word and pseudo count
+pseudo = rep(0, nrow(X_train))
+X_train = cbind(X_train, pseudo)
+X_train = X_train + 1/nrow(X_train)
+
+
+
+sum2 = rowSums(X_test_2)
+pseudo = sum1 - sum2
+
+X_test_2 = cbind(X_test_2, pseudo)
+
+```
+
+The columns for two sets are the same now. 
+```{r}
+
+dim(X_train)
+X_train[1:10,650:661]
+X_test_2[1:10,650:661]
+
+
+```
+
+
+```{r}
+y_train = labels
+y_test = labels
+train = cbind(X_train, y_train)
+
+```
+
+#### Model 1: Naive Bayes
+The first model we built is naive Bayes based on the word counts. We got a matrix of probabilities. Each row of this matrix is an author; each column for this matrix is the weights for a word for authors.
+```{r}
+
+# get the matrix of probabilities
+matrix_of_probabilities = aggregate(.~y_train, data=as.data.frame(X_train), FUN=sum)
+row.names(matrix_of_probabilities) = matrix_of_probabilities$y_train
+matrix_of_probabilities$y_train <- NULL
+sums = rowSums(matrix_of_probabilities)
+matrix_of_probabilities = matrix_of_probabilities / sums
+
+```
+
+Then, we can get the predictions by matrix multiplication and get the author with highest probability for each row. 
+```{r}
+matrix_of_probabilities_t = t(matrix_of_probabilities)
+predictions = as.matrix(X_test_2) %*% log(matrix_of_probabilities_t)
+
+```
+
+```{r, include=FALSE}
+
+predictions = colnames(predictions)[max.col(predictions)]
+confusion_matrix = xtabs(~y_test + predictions)
+
+
+```
+
+
+```{r}
+print("The out-of-sample error rate for the naive bayes model is")
+1 - sum(predictions == y_test)/length(y_test)
+
+
+```
+The out-of-sample error rate for the naive Bayes model is 0.442.
+
+#### Model 2: Random Forest
+The second model we used is random forest. We first built the matrix for train and test set separately, then we kept the words that appeared in both data sets. Lastly, we transformed these two data sets into TFIDF matrix and used random forest to make predictions.
+
+```{r}
+
+X_train = as.data.frame(X_train)
+X_test = as.data.frame(X_test)
+
+# find the shared columns
+share = intersect(colnames(X_train), colnames(X_test))
+X_train_common = X_train[,share]
+X_test_common = X_test[,share]
+y_train = as.factor(y_train)
+y_test = as.factor(y_test)
+
+
+```
+
+
+
+```{r}
+
+
+N = nrow(X_train_common)
+D = ncol(X_train_common)
+# TF weights
+TF_mat = X_train_common/rowSums(X_train_common)
+
+# IDF weights
+IDF_vec = log(1 + N/colSums(X_train_common > 0))
+
+
+# TF-IDF weights:
+# use sweep to multiply the columns (margin = 2) by the IDF weights
+TFIDF_mat = sweep(TF_mat, MARGIN=2, STATS=IDF_vec, FUN="*")  
+
+
+
+
+TF_mat_test = X_test_common/rowSums(X_test_common)
+
+# IDF weights
+IDF_vec_test = log(1 + N/colSums(X_test_common > 0))
+
+
+# TF-IDF weights:
+# use sweep to multiply the columns (margin = 2) by the IDF weights
+TFIDF_mat_test = sweep(TF_mat_test, MARGIN=2, STATS=IDF_vec_test, FUN="*") 
+
+
+```
+
+
+
+```{r, message = FALSE}
+library(randomForest)
+set.seed(20)
+rf.model = randomForest(y_train~., data = TFIDF_mat, distribution = 'multinominal', ntree = 500)
+
+pred = predict(rf.model, newdat = TFIDF_mat_test)
+rf.pred = data.frame(pred)
+
+print ("The out-of-sample error rate for the randomforest model is")
+1 - sum(pred == as.factor(y_test))/length(y_test)
+
+
+
+```
+The out-of-sample error rate for this model is about 57%.
+
+#### Conclusion
+
+We chose Naive Bayes as our final model because it is easier to interpret and has lower error rate compare to the random forest model. 
+
+There are several combinations of authors that are difficult to distinguish. 
+
+The model classified Alexander Smith as Joe Ortiz for 18 times, David Lauder as Todd Nissen for 19 times, Jan Lopatka as John Mastrini for 22 times, Scott Hillis as Jane Macartney for 18 times. 
+
+It is interesting to see that these errors are not symmetrical. For example, the model only classifies Joe Ortiz as Alexander Smith for 8 times. 
+
+```{r}
+for (row in 1:nrow(confusion_matrix)){
+  for (col in 1:ncol(confusion_matrix)){
+    number = confusion_matrix[row, col]
+    if (number > 15 & rownames(confusion_matrix)[row] != colnames(confusion_matrix)[col]){
+      print("The real author is ")
+      print(rownames(confusion_matrix)[row])
+      print("The predicted author is")
+      print(colnames(confusion_matrix)[col])
+      print("The number of times it happens")
+      print(confusion_matrix[row, col])
+      cat("\n")
+    }
+  }
+}
+
+confusion_matrix["JoeOrtiz","AlexanderSmith"]
+```
+
+
+
+##Practice with Association Rule Mining
+
+In this exercises, we identified association rules between grocery items using the apriori algorithm. 
+
+```{r, include=FALSE}
+rm(list = ls())
+library(tidyverse)
+library(arules)
+library(arulesViz)
+
+#read in data, create a transactions object, and remove duplicates.
+setwd("C:/Users/zdc/Dropbox/STA380-master/data")
+groceries = read.transactions(file="groceries.txt", rm.duplicates=TRUE, format="basket", sep=',')
+```
+
+There are 9835 transactions and 169 unique grocery items in the dataset. Majority of the transactions has a length >=5.
+```{r}
+dim(groceries)
+summary(groceries)
+```
+
+To get a basic idea of how frequently items are purchased, we ploted the top 20 most frequently appeared items in the dataset. The results are showed in the graph.
+```{r}
+itemFrequencyPlot(groceries, topN=20, type = "absolute", col = 'blue', xlab = 'Item', main = 'Top 20 Purchased Items by Frequency')
+```
+
+We ran the apriori algorithm to look at rules with support >.005 (0.5% of all transactions contain both X and Y), confidence = .1 (10% of the transactions that contain X also contains Y), and maxlen(# of grocery items) <= 5.
+There are 1582 rules under this setting.
+```{r}
+rules = apriori(groceries, 
+	parameter=list(support=.005, confidence=.1, maxlen=5))
+```
+
+```{r, include=FALSE}
+inspect(rules)
+```
+
+We plotted all the 1582 rules in (support, confidence) space. 
+
+Rules that have lift higher than 3 are in the confidence range between .1 and .5. Those rules also tend to have a low support (below 0.025). 
+
+We selected subset based on this plot to identify strong association rules.
+
+```{r}
+plot(rules)
+```
+
+
+We can find the 85 rules with  lift > 3. Customers are 3 or more times more likely to purchase left hand side items given that they purchased the right hand side items.
+```{r, warning=FALSE}
+subset1 = subset(rules, subset=lift > 3)
+```
+
+```{r, include=FALSE, warning=FALSE}
+inspect(subset1)
+```
+
+Then we selected the 113 rules with confidence > 0.5. More than 50% of the transactions that contains the right hand side items also contains the left hand side items.
+
+We found the right hand side item is either whole milk or other vegetables, while the left hand side has a lot of combinations of items. This suggest that whole milk and other vegetables are associated with many grocery items. 
+
+```{r, warning=FALSE}
+subset2 = subset(rules, subset=confidence > 0.5)
+```
+
+```{r, include=FALSE, warning=FALSE}
+inspect(subset2)
+```
+
+Next, we are interested to find out the strong association rules with lift >3 and confidence higher than 0.5.
+
+The right hand side is dominated by other vegetables, suggesting that other vegetables has strong association with many grocery items such as onions, root vegetables, citrus fruit, and whole milk.
+
+```{r, warning=FALSE}
+inspect(subset(rules, subset=lift > 3 & confidence > 0.5))
+```
+
+We selected another subset with confident > 0.5 and support 0.01. The right hand side is dominated by whole milk. Whole milk is strongly associated with various combinations of yogurt, whipped/sour cream, other vegetables, tropical fruit, root vegetables.
+Other vegetables is strongly associated with citrus fruit, root vegetables, tropical fruit, and rolls/buns.
+```{r, warning=FALSE}
+## Choose a subset
+inspect(subset(rules, subset=confidence > 0.5 & support > 0.01))
+```
+
+#### Conclusion
+
+Based on the analysis above, we wanted to visualize the subset with confidence of 0.1 and support of 0.01. Not surprisingly, we see that many items cluster around whole milk and other vegetables. Rolls buns and soda are also surrounded by many items. These four cluster centers are also the top 4 most frequently purchased items. When customers came to the store to buy any of those four items, they are very likely to buy many combinations of other common grocery items too. It is a general grocery shopping pattern that people tend to buy many grocery items at once. 
+To increase the chance of being sold for the food products with high profit margin, the grocery stores can place them around the cluster centers based on the category of the product. Moreover, the stores can scatter the products with high buying frequency since people will look for those items regardless of the placement very likely.
+
+Additional, we found that the strong association rules exist mostly among food items. Household products did not appear in above analysis. This might due to the fact that the those products' buying frequency is much lower than that of food products.
+
+ 
+```{r, warning=FALSE}
+# graph-based visualization
+sub1 = subset(rules, subset= confidence > 0.1 & support > 0.01)
+summary(sub1)
+plot(sub1, method='graph')
+
+```
+
